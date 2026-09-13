@@ -1,0 +1,34 @@
+name: Bug report
+description: Report a reproducible Clean Bill problem
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Clean Bill version
+    validations:
+      required: true
+  - type: input
+    id: neoforge
+    attributes:
+      label: Minecraft and NeoForge versions
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Drag the log file here. Remove tokens, addresses, or other private information first.
