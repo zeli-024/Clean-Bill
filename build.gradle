@@ -201,3 +201,7 @@ idea {
         downloadJavadoc = true
     }
 }
+
+tasks.named('jar').configure {
+    archiveFileName = "CleanBill_${mod_version}-neoforge-${minecraft_version}.jar"
+}
