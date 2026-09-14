@@ -27,6 +27,9 @@ public final class CleanConfig {
     public static final long DEFAULT_COUNTDOWN = 5L;
     public static final long DEFAULT_MIN_AGE = 30L;
     public static final long DEFAULT_WASH = 60 * 60L;
+    public static final String DEFAULT_POND_LAYOUT = "double";
+    public static final int DEFAULT_POND_PAGES = 3;
+    public static final int MAX_POND_PAGES = 10;
     public static final List<Long> DEFAULT_ALERTS = List.of(10 * 60L, 60L, 30L);
     public static final String DEFAULT_ALERT_MESSAGE = "<#D0D0D0>Cleanup in <#D98C8C>{time}";
     public static final String DEFAULT_COUNTDOWN_MESSAGE = "<#D0D0D0>Cleanup in <#D98C8C>{time}";
@@ -157,6 +160,8 @@ public final class CleanConfig {
         public long minAgeSeconds = DEFAULT_MIN_AGE;
         public boolean itemPondEnabled = true;
         public String itemPondAccess = "ops";
+        public String itemPondLayout = DEFAULT_POND_LAYOUT;
+        public int itemPondPages = DEFAULT_POND_PAGES;
         public boolean itemPondWashEnabled = true;
         public long itemPondWashSeconds = DEFAULT_WASH;
         public String alertMessage = DEFAULT_ALERT_MESSAGE;
@@ -172,6 +177,9 @@ public final class CleanConfig {
             alertSound = choice(alertSound, "jukebox", "exp", "none");
             buttonAccess = choice(buttonAccess, "ops", "all");
             itemPondAccess = choice(itemPondAccess, "ops", "all");
+            itemPondLayout = choice(itemPondLayout, "double", "single");
+            if (itemPondPages <= 0) itemPondPages = DEFAULT_POND_PAGES;
+            itemPondPages = Math.min(MAX_POND_PAGES, itemPondPages);
             if (alertWhenSeconds == null) alertWhenSeconds = new ArrayList<>();
             LinkedHashSet<Long> unique = new LinkedHashSet<>();
             alertWhenSeconds.stream().filter(value -> value != null && value > 0)
@@ -185,6 +193,10 @@ public final class CleanConfig {
                     "&7Cleared &c{count} &7ground items. Stored &a{stacks} &7stacks in the Item Pond. Next cleanup in &c{next}&7.",
                     DEFAULT_CLEAR_MESSAGE);
         }
+
+        public int itemPondRows() { return itemPondLayout.equals("single") ? 3 : 6; }
+        public int itemPondSlotsPerPage() { return itemPondLayout.equals("single") ? 18 : 45; }
+        public int itemPondCapacity() { return itemPondSlotsPerPage() * itemPondPages; }
 
         private static long positive(long value, long fallback) { return value > 0 ? value : fallback; }
         private static String choice(String value, String... allowed) {

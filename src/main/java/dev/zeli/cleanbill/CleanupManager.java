@@ -62,23 +62,26 @@ public final class CleanupManager {
         if (data.paused || clearing) return;
 
         long remaining = Math.max(0, (data.nextCleanup - now + 19) / 20);
+        // The last visible countdown number is 2; the following second performs the cleanup.
+        if (remaining <= 1) {
+            beginCleanup(server);
+            return;
+        }
         if (remaining == lastTimerSecond) return;
         lastTimerSecond = remaining;
         CleanConfig.Values config = CleanConfig.get();
         boolean countdown = remaining > 0 && remaining <= config.countdownSeconds;
         if (countdown && config.countdownShow) {
-            announce(server, config.countdownMessage, remaining,
-                    remaining == Math.min(config.countdownSeconds, config.intervalSeconds));
+            announce(server, config.countdownMessage, remaining, true);
         } else if (remaining > 0 && config.alertWhenSeconds.contains(remaining)) {
             announce(server, config.alertMessage, remaining, true);
         }
-        if (remaining <= 0) beginCleanup(server);
     }
 
     private void ensureTimers(CleanBillData data, long now) {
         CleanConfig.Values config = CleanConfig.get();
         boolean changed = false;
-        if (data.nextCleanup < 0) { data.nextCleanup = now + config.intervalSeconds * 20; changed = true; }
+        if (data.nextCleanup < 0) { data.nextCleanup = nextCleanupTime(now, config.intervalSeconds); changed = true; }
         if (data.nextWash < 0) { data.nextWash = now + config.itemPondWashSeconds * 20; changed = true; }
         if (changed) data.setDirty();
     }
@@ -148,7 +151,7 @@ public final class CleanupManager {
         CleanBillData data = CleanBillData.get(server);
         long now = server.overworld().getGameTime();
         data.lastCleanup = now;
-        data.nextCleanup = now + CleanConfig.get().intervalSeconds * 20;
+        data.nextCleanup = nextCleanupTime(now, CleanConfig.get().intervalSeconds);
         data.setDirty();
         lastTimerSecond = Long.MIN_VALUE;
         announceClear(server);
@@ -158,7 +161,7 @@ public final class CleanupManager {
     public void resetTimer(MinecraftServer server) {
         CleanBillData data = CleanBillData.get(server);
         long now = server.overworld().getGameTime();
-        data.nextCleanup = now + CleanConfig.get().intervalSeconds * 20;
+        data.nextCleanup = nextCleanupTime(now, CleanConfig.get().intervalSeconds);
         data.remainingWhenPaused = -1;
         data.paused = false;
         data.setDirty();
@@ -188,26 +191,39 @@ public final class CleanupManager {
     public long remainingSeconds(MinecraftServer server) {
         CleanBillData data = CleanBillData.get(server);
         long ticks = data.paused ? data.remainingWhenPaused : data.nextCleanup - server.overworld().getGameTime();
-        return Math.max(0, (ticks + 19) / 20);
+        return Math.max(0, (ticks + 19) / 20 - 1);
+    }
+
+    private long nextCleanupTime(long now, long intervalSeconds) {
+        // One internal lead second lets the visible sequence replace "1" with the cleanup itself.
+        return now + (intervalSeconds + 1) * 20;
     }
 
     public boolean isClearing() { return clearing; }
 
     public void broadcastAction(MinecraftServer server, String prefix, Component actor) {
-        Component message = TextUtil.gray(prefix).append(actor.copy().withStyle(style -> style.withColor(TextUtil.PALE_PURPLE)))
-                .append(TextUtil.gray("."));
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) player.sendSystemMessage(message);
+        Component message = TextUtil.gray(prefix)
+                .append(actor.copy().withStyle(style -> style.withColor(TextUtil.PALE_PURPLE)));
+        broadcastNotice(server, message);
     }
 
     public void broadcastStatus(MinecraftServer server, Component actor) {
         CleanBillData data = CleanBillData.get(server);
         String state = data.paused ? "Paused: " : clearing ? "Cleaning. Next: " : "Next cleanup: ";
-        Component message = TextUtil.purple("QC status requested by ")
+        Component message = TextUtil.gray("Status requested by ")
                 .append(actor.copy().withStyle(style -> style.withColor(TextUtil.PALE_PURPLE)))
                 .append(TextUtil.gray(" — " + state))
                 .append(TextUtil.red(CleanConfig.formatDuration(remainingSeconds(server))))
-                .append(TextUtil.gray(" — Pond: " + data.pondStackCount() + "/135, filtered: " + data.filteredStackCount() + "/45."));
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) player.sendSystemMessage(message);
+                .append(TextUtil.gray(" — Pond: " + data.pondStackCount() + "/"
+                        + CleanConfig.get().itemPondCapacity() + ", filtered: "
+                        + data.filteredStackCount() + "/45"));
+        broadcastNotice(server, message);
+    }
+
+    /** Uses a vanilla announcement key so chat mods classify this as system output, not player chat. */
+    public void broadcastNotice(MinecraftServer server, Component message) {
+        Component announcement = Component.translatable("chat.type.announcement", TextUtil.purple("Clean Bill"), message);
+        for (ServerPlayer player : server.getPlayerList().getPlayers()) player.sendSystemMessage(announcement);
     }
 
     public void preview(ServerPlayer player, String kind) {
@@ -222,17 +238,26 @@ public final class CleanupManager {
         if (actionBar) {
             message = clear
                     ? TextUtil.gray("Cleared ").append(TextUtil.green("128")).append(TextUtil.gray(" items"))
-                    : TextUtil.gray("Cleanup in ").append(TextUtil.red(kind.equals("countdown") ? "5s" : "10m"));
+                    : TextUtil.gray("Cleanup in ").append(TextUtil.red(kind.equals("countdown")
+                    ? CleanConfig.formatDuration(config.countdownSeconds)
+                    : previewAlertTime(config)));
         } else if (clear) {
             message = TextUtil.message(config.clearMessage, Map.of(
                     "count", "128", "stacks", "12", "protected", "4", "overflow", "0", "next", "20m"));
         } else {
             String template = kind.equals("countdown") ? config.countdownMessage : config.alertMessage;
-            message = TextUtil.message(template, Map.of("time", kind.equals("countdown") ? "5s" : "10m"));
+            message = TextUtil.message(template, Map.of("time", kind.equals("countdown")
+                    ? CleanConfig.formatDuration(config.countdownSeconds)
+                    : previewAlertTime(config)));
         }
-        player.displayClientMessage(message, actionBar);
-        if (!clear) player.sendSystemMessage(previewButtons());
+        if (actionBar) player.displayClientMessage(message, true);
+        else player.sendSystemMessage(clear ? message : message.copy().append(TextUtil.gray(" — ")).append(previewButtons()));
+        if (actionBar && !clear) player.sendSystemMessage(message.copy().append(TextUtil.gray(" — ")).append(previewButtons()));
         sound(player, clear);
+    }
+
+    private String previewAlertTime(CleanConfig.Values config) {
+        return config.alertWhenSeconds.isEmpty() ? "10m" : CleanConfig.formatDuration(config.alertWhenSeconds.getFirst());
     }
 
     private boolean eligibleNow(ItemEntity item, long now) {
@@ -257,14 +282,23 @@ public final class CleanupManager {
     private void announce(MinecraftServer server, String template, long seconds, boolean showButtons) {
         CleanConfig.Values config = CleanConfig.get();
         if (config.alertShow.equals("none")) return;
-        Component message = config.alertShow.equals("actionbar")
+        boolean actionBar = config.alertShow.equals("actionbar");
+        Component message = actionBar
                 ? TextUtil.gray("Cleanup in ").append(TextUtil.red(CleanConfig.formatDuration(seconds)))
                 : TextUtil.message(template, Map.of("time", CleanConfig.formatDuration(seconds)));
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            player.displayClientMessage(message, config.alertShow.equals("actionbar"));
+            boolean controls = showButtons && canUseControls(server, player);
+            if (actionBar) player.displayClientMessage(message, true);
+            if (!actionBar || controls) {
+                Component chatBase = actionBar
+                        ? TextUtil.message(template, Map.of("time", CleanConfig.formatDuration(seconds)))
+                        : message.copy();
+                var chat = chatBase.copy();
+                if (controls) chat.append(TextUtil.gray(" — ")).append(clickableControls());
+                player.sendSystemMessage(chat);
+            }
             sound(player, false);
         }
-        if (showButtons) clickableAlert(server);
     }
 
     private void announceClear(MinecraftServer server) {
@@ -282,26 +316,25 @@ public final class CleanupManager {
         }
     }
 
-    private void clickableAlert(MinecraftServer server) {
-        Component line = TextUtil.gray("Click: ")
-                .append(Component.literal("[clean now]").withStyle(style -> style.withColor(TextUtil.PASTEL_RED)
+    private Component clickableControls() {
+        return Component.literal("[clean now]").withStyle(style -> style.withColor(TextUtil.PASTEL_RED)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cb clean"))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, TextUtil.gray("Clear eligible items now")))))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, TextUtil.gray("Clear eligible items now"))))
                 .append(TextUtil.gray(" or "))
                 .append(Component.literal("[clean later]").withStyle(style -> style.withColor(TextUtil.PASTEL_GREEN)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/cb cancel"))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, TextUtil.gray("Reset the cleanup timer")))))
-                .append(TextUtil.gray("."));
-        for (ServerPlayer player : server.getPlayerList().getPlayers()) {
-            if (CleanConfig.get().buttonAccess.equals("all")
-                    || server.getPlayerList().isOp(player.getGameProfile())) player.sendSystemMessage(line);
-        }
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, TextUtil.gray("Reset the cleanup timer")))));
+    }
+
+    private boolean canUseControls(MinecraftServer server, ServerPlayer player) {
+        return CleanConfig.get().buttonAccess.equals("all")
+                || server.getPlayerList().isOp(player.getGameProfile());
     }
 
     private Component previewButtons() {
-        return TextUtil.gray("Preview: ").append(TextUtil.red("[clean now]"))
+        return TextUtil.red("[clean now]")
                 .append(TextUtil.gray(" or ")).append(TextUtil.green("[clean later]"))
-                .append(TextUtil.gray(" (disabled)."));
+                .append(TextUtil.gray(" (preview)"));
     }
 
     private void sound(ServerPlayer player, boolean finalSound) {

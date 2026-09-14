@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.0.1 - 2026-09-13
+
+- Marked player-attributed broadcasts as vanilla announcements for E33Chat compatibility.
+- Joined clickable controls to their matching alert and removed the stray parsed period.
+- Made countdown start adjustable and changed the sequence to clear instead of displaying `1`.
+- Corrected alert-setting Back navigation and added current values to menu titles.
+- Added single/double Item Pond layouts and configurable page counts from 1 to 10.
+- Kept filtered stacks physically separate from normal Pond storage and protected from washing.
+
 ## 0.1.1 - 2026-09-09
 
 - Rebranded the project and internal mod identity as Clean Bill - Item Cleaner.

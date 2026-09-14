@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class CleanBillData extends SavedData {
-    public static final int POND_SIZE = 135;
+    public static final int MAX_POND_SIZE = 45 * CleanConfig.MAX_POND_PAGES;
     public static final int FILTERED_SIZE = 45;
     // Keep the original SavedData key so 0.1.1 upgrades retain timers and Item Pond contents.
     private static final String NAME = "quackyclean";
@@ -21,11 +21,11 @@ public final class CleanBillData extends SavedData {
     public long lastCleanup = -1;
     public long nextWash = -1;
     public boolean paused;
-    public final List<ItemStack> pond = new ArrayList<>(POND_SIZE);
+    public final List<ItemStack> pond = new ArrayList<>(MAX_POND_SIZE);
     public final List<ItemStack> filtered = new ArrayList<>(FILTERED_SIZE);
 
     public CleanBillData() {
-        for (int i = 0; i < POND_SIZE; i++) pond.add(ItemStack.EMPTY);
+        for (int i = 0; i < MAX_POND_SIZE; i++) pond.add(ItemStack.EMPTY);
         for (int i = 0; i < FILTERED_SIZE; i++) filtered.add(ItemStack.EMPTY);
     }
 
@@ -45,7 +45,7 @@ public final class CleanBillData extends SavedData {
         for (int i = 0; i < items.size(); i++) {
             CompoundTag entry = items.getCompound(i);
             int slot = entry.getInt("Slot");
-            if (slot >= 0 && slot < POND_SIZE) {
+            if (slot >= 0 && slot < MAX_POND_SIZE) {
                 data.pond.set(slot, ItemStack.parseOptional(registries, entry.getCompound("Stack")));
             }
         }
@@ -117,6 +117,29 @@ public final class CleanBillData extends SavedData {
         return true;
     }
 
+    /** Compacts all Pond contents into a requested visible capacity without deleting anything. */
+    public boolean resizePond(int capacity) {
+        capacity = Math.max(1, Math.min(MAX_POND_SIZE, capacity));
+        List<ItemStack> compacted = emptyInventory(capacity);
+        for (ItemStack stack : pond) {
+            if (stack.isEmpty()) continue;
+            if (!canFit(compacted, stack)) return false;
+            addWithoutOverflow(compacted, stack);
+        }
+        for (ItemStack stack : pond) if (!stack.isEmpty()) stack.setCount(0);
+        for (int i = 0; i < pond.size(); i++) {
+            pond.set(i, i < compacted.size() ? compacted.get(i) : ItemStack.EMPTY);
+        }
+        setDirty();
+        return true;
+    }
+
+    private static List<ItemStack> emptyInventory(int size) {
+        List<ItemStack> inventory = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) inventory.add(ItemStack.EMPTY);
+        return inventory;
+    }
+
     private static boolean canFit(List<ItemStack> inventory, ItemStack offered) {
         int room = 0;
         for (ItemStack stack : inventory) {
@@ -159,8 +182,9 @@ public final class CleanBillData extends SavedData {
 
     /** Adds a stack, merging first. If full, the oldest occupied slot is discarded and slots shift left. */
     public int addToPond(ItemStack offered) {
+        int capacity = Math.max(1, Math.min(pond.size(), CleanConfig.get().itemPondCapacity()));
         ItemStack stack = offered.copy();
-        for (int i = 0; i < pond.size() && !stack.isEmpty(); i++) {
+        for (int i = 0; i < capacity && !stack.isEmpty(); i++) {
             ItemStack existing = pond.get(i);
             if (!existing.isEmpty() && ItemStack.isSameItemSameComponents(existing, stack)) {
                 int move = Math.min(stack.getCount(), existing.getMaxStackSize() - existing.getCount());
@@ -173,14 +197,14 @@ public final class CleanBillData extends SavedData {
         int discarded = 0;
         while (!stack.isEmpty()) {
             int empty = -1;
-            for (int i = 0; i < pond.size(); i++) if (pond.get(i).isEmpty()) { empty = i; break; }
+            for (int i = 0; i < capacity; i++) if (pond.get(i).isEmpty()) { empty = i; break; }
             if (empty < 0) {
                 ItemStack oldest = pond.getFirst();
                 discarded += oldest.getCount();
                 oldest.setCount(0);
-                pond.removeFirst();
-                pond.add(ItemStack.EMPTY);
-                empty = pond.size() - 1;
+                for (int i = 0; i < capacity - 1; i++) pond.set(i, pond.get(i + 1));
+                pond.set(capacity - 1, ItemStack.EMPTY);
+                empty = capacity - 1;
             }
             int amount = Math.min(stack.getCount(), stack.getMaxStackSize());
             pond.set(empty, stack.copyWithCount(amount));

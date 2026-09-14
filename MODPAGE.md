@@ -8,7 +8,7 @@ Clean Bill is a lightweight, server-side item cleaner for Minecraft 1.21.1 on Ne
 
 Choose how often cleanup runs using normal seconds and minutes—no tick conversion required. Operators can configure the mod through categorized vanilla chest menus opened with `/cb config`; no client-side configuration screen or companion mod is needed.
 
-- Adjustable cleanup interval and countdown
+- Adjustable cleanup interval and countdown start
 - Any number of scheduled warning times
 - Optional minimum item-age protection for freshly dropped items
 - Pause, resume, delay, or start a cleanup immediately
@@ -16,7 +16,9 @@ Choose how often cleanup runs using normal seconds and minutes—no tick convers
 
 ## Friendly player warnings
 
-Warnings can appear in chat or as a short action-bar message. Clean Bill can play a note-block or experience sound, show a second-by-second countdown, and provide clickable **Clean Now** and **Clean Later** controls to operators or everyone.
+Warnings can appear in chat or as a short action-bar message. Clean Bill can play a note-block or experience sound and show a second-by-second countdown. A 5-second countdown reads `5, 4, 3, 2`, then cleans instead of displaying `1`.
+
+Clickable **Clean Now** and **Clean Later** controls appear on the same chat line as their alert. Access can be given to operators or everyone.
 
 Alert, countdown, and cleanup-result messages are editable in-game. Formatting supports familiar `&` color/style codes as well as hex colors such as `<#A27BB5>`.
 
@@ -24,12 +26,14 @@ Private preview buttons let an operator test the current message, placement, and
 
 ## The Item Pond
 
-Instead of permanently destroying cleared items, Clean Bill can collect them in a persistent three-page Item Pond with space for 135 stacks.
+Instead of permanently destroying cleared items, Clean Bill can collect them in a persistent Item Pond. Choose a single- or double-chest interface and configure between 1 and 10 pages.
 
 - Open it with `/cb itempond`, even while collection is disabled
+- Use 18 storage slots per page in single-chest mode or 45 per page in double-chest mode
+- Increase or reduce the page count without deleting items; unsafe reductions are refused
 - Allow access for operators only or for everyone
 - Take items out, but never insert unrelated items
-- Move important stacks into a separate 45-slot filtered inventory
+- Move important stacks completely out of the normal Pond and into a separate 45-slot filtered chest
 - Filtered items are protected from every wash
 - Wash the normal Pond manually or on a configurable schedule
 - Navigate pages and manage every Pond setting from its bottom toolbar
