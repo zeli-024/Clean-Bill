@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.0.2 - 2026-09-30
+
+- Replaced the mod icon.
+
 ## 1.0.1 - 2026-09-13
 
 - Marked player-attributed broadcasts as vanilla announcements for E33Chat compatibility.
